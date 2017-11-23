@@ -1,25 +1,128 @@
 ---
-title: "Reproducible Research: Peer Assessment 1"
+title: "RepData"
+author: "Mark Kaghazgarian"
+date: "11/21/2017"
 output: 
-  html_document:
-    keep_md: true
+  html_document: 
+    fig_caption: yes
+editor_options: 
+  chunk_output_type: console
 ---
 
+```{r setup, echo=FALSE}
+knitr::opts_chunk$set(warning = FALSE)
+knitr::opts_chunk$set(fig.keep = "all", fig.path = "figure/") 
+```
 
 ## Loading and preprocessing the data
 
-
+```{r loadData, echo=TRUE}
+library("data.table")
+library("ggplot2")
+df <- read.csv(unz("./activity.zip", "activity.csv"))
+dt <- data.table(df)
+```
 
 ## What is mean total number of steps taken per day?
+```{r mean, echo=TRUE}
+dt[, mean(steps, na.rm = TRUE), by = date]
+```
 
+```{r hist1, echo=TRUE}
+dt_hist <- dt[, .(steps = sum(steps, na.rm = TRUE)), by = date]
+hist(dt_hist$steps, 
+     breaks = 8, 
+     col = "blue", 
+     main="Frequnecy of total steps in each day", 
+     xlab = "Steps")
+```
 
+```{r}
+dt_hist[, mean(steps)]
+dt_hist[, median(steps)]
+```
 
 ## What is the average daily activity pattern?
 
+First evaluate the average number of steps taken in each interval:
 
+```{r}
+steps_avg <- lapply(with(dt, split(steps,interval)),mean, na.rm = TRUE)
+```
+
+Then plot based on result of above calculation:
+```{r plot1, echo=TRUE}
+plot(names(steps_avg), steps_avg, type = "l",
+     main= "Average taken steps over all days",
+     xlab="Interval",
+     ylab="Average steps")
+```
+
+In order to find interval which, on average across all the days in the dataset, contains the maximum number of steps:
+
+```{r max, echo=TRUE}
+steps_avg[which.max(steps_avg)]
+```
 
 ## Imputing missing values
 
+ * For counting **NA** in dataset we can do like this:
+ 
+```{r}
+apply(dt, 2, function(x) sum(length(which(is.na(x)))))
+```
 
+ * In order to impute the missing values in steps, I decided to use the mean of taken steps in the same interval in all days:
+ 
+```{r}
+## First we need to cast steps to double in order to prevent auto 
+## casting from double to int
 
-## Are there differences in activity patterns between weekdays and weekends?
+dt[, steps := as.double(steps)]
+
+## Then, we need to iterate over the dataset and fill the missing
+## values with mean values
+for (i in 1:nrow(dt)) {
+    if (is.na(dt[i,steps])) {
+        dt[i,steps := as.double(steps_avg[[as.character(dt[i,interval])]])]
+    }
+}
+```
+
+Plot a histogram of new constructed dataset imputed with mean values:
+
+```{r hist2, echo=TRUE}
+dt_hist <- dt[, .(steps = sum(steps, na.rm = TRUE)), by = date]
+hist(dt_hist$steps, 
+     breaks = 8, 
+     col = "blue", 
+     main="Frequnecy of total steps in each day (Imputed dataset version)", 
+     xlab = "Steps")
+```
+
+**Mean** and **Median** total number of steps taken per day after filling missed value with means:
+```{r}
+dt_hist[, mean(steps)]
+dt_hist[, median(steps)]
+```
+ 
+## Are there differences in activity patterns between weekdays and weekends? 
+ 
+```{r}
+dt[, weekend := ifelse (weekdays(as.Date(date)) %in% c("Saturday", "Sunday") , "weekend" , "weekday")]
+```
+
+```{r}
+dt2 <- dt[,.(steps = mean(steps),weekend,interval), by=c('interval','weekend')]
+
+```
+
+```{r plot2, echo=TRUE}
+qplot(interval, steps, 
+     data = dt2,
+     geom=c("line"),
+     xlab = "Interval", 
+     ylab = "Number of steps", 
+     main = "") + facet_wrap( ~ weekend, ncol = 1)
+```
+
